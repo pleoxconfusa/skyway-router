@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Minneapolis Skyway Router</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{--void:#070b12;--ink-faint:#566377;--ink:#9fb0c6;--ink-bright:#e9f1fb;--sky:#49bcdd;--skyglow:#7fe0ff;--cov:#5fd39a;--warn:#e9566d;--out:#f6a13d;--ok:#5fd39a;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--sans:"Inter Tight","Helvetica Neue",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--void);overflow:hidden;font-family:var(--sans);-webkit-font-smoothing:antialiased;color:var(--ink)}
+  #map{position:fixed;inset:0;background:#0a0f17;z-index:1}
+  .leaflet-container{background:#0a0f17;font-family:var(--mono)}
+  .leaflet-control-attribution{background:rgba(8,13,21,.8)!important;color:#566377!important}
+  .leaflet-control-attribution a{color:#7c8aa0!important}
+  .leaflet-bar a{background:#101a29;color:var(--ink-bright);border-color:#25364c}
+  .leaflet-bar a:hover{background:#16243a}
+  .leaflet-control-layers{background:rgba(12,19,29,.95);color:var(--ink);border:1px solid #1c2a3c;border-radius:9px}
+  .ab-icon{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:12px;color:#06121a;border:2px solid #06121a;border-radius:50%;width:22px;height:22px;box-shadow:0 2px 6px #0009}
+  .lbl-icon{font-family:var(--mono);font-size:9.5px;color:#bcd0e8;text-shadow:0 0 3px #000,0 0 3px #000,0 1px 2px #000;white-space:nowrap;font-weight:600;pointer-events:none}
+
+  #panel{position:fixed;top:12px;left:12px;width:312px;max-width:calc(100vw - 24px);background:linear-gradient(180deg,rgba(12,19,29,.96),rgba(8,13,21,.93));border:1px solid #1a2536;border-radius:13px;backdrop-filter:blur(11px);box-shadow:0 18px 50px -22px #000,inset 0 1px 0 #ffffff0a;z-index:1000;overflow:hidden;max-height:calc(100vh - 24px);display:flex;flex-direction:column}
+  .mast{padding:12px 14px 10px;position:relative}
+  .eyebrow{font-family:var(--mono);font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--sky);display:flex;align-items:center;gap:7px}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}
+  h1{font-size:16px;line-height:1.1;letter-spacing:-.02em;font-weight:650;margin:7px 0 2px;color:var(--ink-bright)}
+  .sub{font-size:11px;color:var(--ink-faint);line-height:1.4}
+  .collapse{position:absolute;top:12px;right:12px;width:24px;height:24px;border-radius:6px;border:1px solid #25364c;background:#101a29;color:var(--ink);cursor:pointer;font-size:13px;line-height:1}
+  .controls{padding:10px 14px;border-top:1px solid #161f2c;display:grid;gap:9px;overflow-y:auto}
+  .srch{display:flex;gap:6px}
+  .srch input{flex:1;min-width:0;background:#0c1521;border:1px solid #25364c;color:var(--ink-bright);border-radius:7px;padding:7px 9px;font-family:var(--sans);font-size:12.5px}
+  .srch input::placeholder{color:#48566b}
+  .results{display:none;flex-direction:column;gap:4px;background:#0a111c;border:1px solid #1c2a3c;border-radius:8px;padding:5px;max-height:170px;overflow-y:auto}
+  .results.on{display:flex}
+  .res{display:flex;gap:6px;align-items:center;padding:5px 6px;border-radius:6px}
+  .res:hover{background:#11203360}
+  .res .nm{flex:1;font-size:11px;color:var(--ink);line-height:1.25;overflow:hidden}
+  .res .nm b{color:var(--ink-bright);font-weight:600}
+  .res .set{display:flex;gap:3px}
+  .res .set button{width:24px;height:24px;border-radius:6px;border:1px solid #2a3a50;background:#101a29;cursor:pointer;font-family:var(--mono);font-weight:700;font-size:11px}
+  .res .set .a{color:var(--ok)}.res .set .b{color:var(--warn)}
+  .ctl-row{display:flex;gap:7px;align-items:center}
+  .ctl-row label{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);width:34px;flex:none}
+  select,input[type=time]{appearance:none;background:#0c1521;border:1px solid #25364c;color:var(--ink-bright);border-radius:7px;padding:6px 8px;font-family:var(--mono);font-size:12px;flex:1;min-width:0}
+  .btn{appearance:none;border:1px solid #25364c;background:#101a29;color:var(--ink);border-radius:7px;padding:6px 9px;font-weight:600;font-size:11.5px;cursor:pointer;transition:.12s;white-space:nowrap}
+  .btn:hover{border-color:var(--sky);color:var(--ink-bright)}
+  .btn.now{background:var(--sky);color:#06121a;border-color:transparent}
+  .btn.go{background:var(--accent,#f6a13d);color:#06121a;border-color:transparent}
+  .seg{display:flex;background:#0a111c;border:1px solid #1c2a3c;border-radius:8px;padding:3px;gap:3px;flex:1}
+  .seg button{flex:1;appearance:none;border:0;background:transparent;color:var(--ink-faint);font-weight:600;font-size:10.5px;padding:6px 3px;border-radius:6px;cursor:pointer;transition:.12s}
+  .seg button[aria-selected="true"]{color:#06121a;background:var(--out)}
+  .ab{display:flex;gap:7px}
+  .ab .pill{flex:1;border:1px solid #25364c;border-radius:8px;padding:7px 9px;cursor:pointer;background:#0c1521}
+  .ab .pill[data-active="true"]{box-shadow:0 0 0 1px var(--out) inset;border-color:var(--out)}
+  .ab .pill .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);display:flex;align-items:center;gap:5px}
+  .ab .pill .lab .d{width:8px;height:8px;border-radius:50%}
+  .ab .pill .nm{font-size:11px;color:var(--ink-bright);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mini{display:flex;gap:6px}.mini .btn{flex:1;text-align:center;padding:5px}
+  .summary{display:flex;gap:10px;padding:8px 10px;background:#0b1422;border:1px solid #1b2940;border-radius:9px;align-items:center}
+  .summary .big{font-family:var(--mono);font-size:21px;color:var(--ink-bright);line-height:1;font-variant-numeric:tabular-nums}
+  .summary .s2{font-family:var(--mono);font-size:9px;color:var(--ink-faint);line-height:1.5;text-transform:uppercase;letter-spacing:.06em}
+  .summary .s2 b{color:var(--ok)}.summary .s2 .wn{color:var(--warn)}
+  .dirs{display:grid;gap:0;font-size:11.5px;max-height:200px;overflow-y:auto;border-top:1px dashed #1c2735;padding-top:8px}
+  .step{display:flex;gap:8px;padding:4px 0;line-height:1.35}
+  .step .ic{font-family:var(--mono);font-size:11px;flex:none;width:16px;text-align:center;color:var(--ink-faint);padding-top:1px}
+  .step.sky .ic{color:var(--skyglow)}
+  .step.cov .ic{color:var(--cov)}
+  .step.cov .tx b{color:var(--cov)}.step.out .ic{color:var(--out)}
+  .step .tx{color:var(--ink)}.step .tx b{color:var(--ink-bright);font-weight:600}
+  .step .tx .cl{color:var(--warn);font-size:10px}
+  .step.term .tx b{color:var(--out)}
+  .legend{display:flex;flex-wrap:wrap;gap:9px;padding-top:7px;border-top:1px dashed #1c2735;font-size:10px}
+  .legend span{display:flex;align-items:center;gap:5px;color:var(--ink-faint)}
+  .legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+  .meth{font-size:9.5px;color:var(--ink-faint);line-height:1.5;border-top:1px dashed #1c2735;padding-top:8px}
+  .meth b{color:var(--ink)}
+  .hint{font-size:10.5px;color:var(--out);text-align:center;padding:3px}
+  .clockchip{position:fixed;right:12px;top:12px;z-index:1000;font-family:var(--mono);background:rgba(12,19,29,.92);border:1px solid #1c2a3c;border-radius:10px;padding:7px 11px;text-align:right;backdrop-filter:blur(8px)}
+  .clockchip .t{font-size:16px;color:var(--ink-bright);font-variant-numeric:tabular-nums}
+  .clockchip .d{font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);margin-top:2px}
+  .clockchip .st{font-size:8.5px;margin-top:3px}.clockchip .st.open{color:var(--ok)}.clockchip .st.closed{color:var(--warn)}
+  body.collapsed .controls{display:none}
+  @media (max-width:560px){#panel{width:calc(100vw - 16px);left:8px;top:8px;max-height:calc(100vh - 16px)}.clockchip{top:auto;bottom:12px;right:12px}}
+</style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="clockchip"><div class="t" id="cc-t">5:15 PM</div><div class="d" id="cc-d">Friday</div><div class="st open" id="cc-st">skyways open</div></div>
+
+  <div id="panel">
+    <div class="mast">
+      <button class="collapse" id="collapse">–</button>
+      <div class="eyebrow"><span class="dot"></span>MPLS SKYWAY ROUTER</div>
+      <h1>Skyway Router · Live OSM</h1>
+      <div class="sub">Search or <b>tap</b> the map to set <b style="color:var(--ok)">start</b> &amp; <b style="color:var(--warn)">end</b>. With <b>Min outside</b> (default) it minimizes time spent outdoors first, then picks the fastest such route. <b>Fastest</b> ignores shelter.</div>
+    </div>
+    <div class="controls">
+      <div class="srch">
+        <input id="q" placeholder="Search address or place…" autocomplete="off">
+        <button class="btn go" id="go">Find</button>
+      </div>
+      <div class="results" id="results"></div>
+
+      <div class="ab">
+        <div class="pill" id="pill-a" data-active="true"><div class="lab"><span class="d" style="background:var(--ok)"></span>Start</div><div class="nm" id="nm-a">tap map…</div></div>
+        <div class="pill" id="pill-b"><div class="lab"><span class="d" style="background:var(--warn)"></span>End</div><div class="nm" id="nm-b">tap map…</div></div>
+      </div>
+      <div class="mini"><button class="btn" id="swap">⇄ Swap</button><button class="btn" id="clear">✕ Clear</button><button class="btn" id="gmaps" title="Open query in Google Maps">Google ↗</button></div>
+
+      <div class="ctl-row"><label>Day</label>
+        <select id="day"><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option><option value="5">Saturday</option><option value="6">Sunday</option></select>
+        <input type="time" id="time" value="17:15"></div>
+      <div class="mini"><button class="btn now" id="now">◉ Now</button><button class="btn" id="hours-model">Hours: typical</button></div>
+
+      <div class="ctl-row"><label>Goal</label>
+        <div class="seg" id="wx"><button data-w="clear">Fastest</button><button data-w="cold">Balanced</button><button data-w="incl" aria-selected="true">Min&nbsp;outside</button><button data-w="bliz">Strict</button></div></div>
+
+      <div class="summary" id="summary" style="display:none"><div class="big" id="sum-time">—</div><div class="s2" id="sum-2"></div></div>
+      <div class="hint" id="hint">Search or tap the map to set start &amp; end.</div>
+      <div class="dirs" id="dirs"></div>
+
+      <div class="legend">
+        <span><i style="background:var(--skyglow)"></i>skyway open</span>
+        <span><i style="background:var(--warn)"></i>skyway closed</span>
+        <span><i style="background:var(--cov)"></i>covered walkway</span>
+        <span><i style="background:var(--out);height:0;border-top:2px dashed var(--out)"></i>uncovered</span>
+      </div>
+      <div class="meth"><b>Real streets, modeled skyway hours.</b> The basemap and the walking + skyway network are live OpenStreetMap — outdoor routing follows real sidewalks/streets, and skyways are drawn on real geometry. Skyway hours stay modeled (no live per-door feed; each building sets its own and they change): city <b>ordinance</b> (M–F 6:30a–10p · Sat 9:30a–8p · Sun 12–6p) or <b>typical</b> (most close ~6p, weekends shut), switchable; hospital/hotel zones run 24h. Skyway segments are identified from OSM tags &mdash; level/layer&ge;1, <b>indoor corridors</b> (indoor=yes/corridor), building passages, and skyway tags &mdash; so building-internal concourses count, not just bridges. <b>Through-buildings</b> links skyway ends that share an OSM building footprint (lobbies/concourses you pass through, like the Ruth&rsquo;s Chris entrance) plus a street door into each skyway-connected building \u2014 toggleable. If OSM can&rsquo;t load, it falls back to a modeled grid. Tiles/search are OSM/Carto/Nominatim (rate-limited). Watch the signs.</div>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+/* ===================== CONSTANTS / HELPERS ===================== */
+const AVENUES=["5th Ave N","3rd Ave N","1st Ave N","Hennepin Ave","Nicollet Mall","Marquette Ave","2nd Ave S","3rd Ave S","4th Ave S","5th Ave S","Portland Ave","Park Ave","Chicago Ave"];
+const STREETS=["Washington Ave","S 2nd St","S 3rd St","S 4th St","S 5th St","S 6th St","S 7th St","S 8th St","S 9th St","S 10th St","S 11th St","S 12th St"];
+const SPEED=1.32, LEVEL=20, TRANS_R=40;
+// shelter-tier weights {wU:uncovered, wC:covered}; edge cost = wU*uncov + wC*cov + total → lexicographic min(uncovered) ≫ min(covered) ≫ min(time)
+const MODES={clear:{wU:0,wC:0},cold:{wU:12,wC:4},incl:{wU:1e8,wC:1e4},bliz:{wU:1e8,wC:1e8}};
+let SKY_CIRC=1.0; // set per active graph
+const g=id=>document.getElementById(id);
+function hav(aLat,aLng,bLat,bLng){const R=6371000,r=Math.PI/180;const dLat=(bLat-aLat)*r,dLng=(bLng-aLng)*r;const s=Math.sin(dLat/2)**2+Math.cos(aLat*r)*Math.cos(bLat*r)*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(s));}
+function cardinal(aLat,aLng,bLat,bLng){const r=Math.PI/180;const y=Math.sin((bLng-aLng)*r)*Math.cos(bLat*r);const x=Math.cos(aLat*r)*Math.sin(bLat*r)-Math.sin(aLat*r)*Math.cos(bLat*r)*Math.cos((bLng-aLng)*r);let b=(Math.atan2(y,x)*180/Math.PI+360)%360;return ["north","northeast","east","southeast","south","southwest","west","northwest"][Math.round(b/45)%8];}
+
+/* ===================== HOURS ===================== */
+let MODEL="typ",DOW=4,MINS=17*60+15,WXK="incl";
+function nodeOpen(prof,model,dow,mins){if(prof==="ext")return true;if(prof==="off"){if(dow>=5)return false;return mins>=420&&mins<1080;}if(prof==="lim"){if(dow>=5)return false;return mins>=540&&mins<1020;}if(model==="ord"){if(dow<=4)return mins>=390&&mins<1320;if(dow===5)return mins>=570&&mins<1200;return mins>=720&&mins<1080;}else{if(dow<=4)return mins>=390&&mins<1080;return false;}}
+function skyOpen(e,model,dow,mins){return e.profs.every(p=>nodeOpen(p,model,dow,mins));}
+const ZONES=[
+ {p:"ext",a:44.9715,b:44.9742,c:-93.2640,d:-93.2595}, // HCMC / Elliot hospital 24h
+ {p:"ext",a:44.9744,b:44.9758,c:-93.2722,d:-93.2706}, // W / Foshay hotel
+ {p:"ext",a:44.9722,b:44.9734,c:-93.2736,d:-93.2720}, // Hilton
+ {p:"off",a:44.9764,b:44.9782,c:-93.2666,d:-93.2646}, // Government Center
+ {p:"lim",a:44.9726,b:44.9750,c:-93.2596,d:-93.2558}, // US Bank Stadium
+ {p:"lim",a:44.9698,b:44.9716,c:-93.2754,d:-93.2732}, // Convention Center
+];
+function profOfPoint(lat,lng){for(const z of ZONES)if(lat>=z.a&&lat<=z.b&&lng>=z.c&&lng<=z.d)return z.p;return "std";}
+
+/* ===================== GRAPH (unified) ===================== */
+function buildIndex(nodeArr,cell){const idx=new Map();for(let i=0;i<nodeArr.length;i++){const n=nodeArr[i];const k=Math.floor(n.lat/cell)+"_"+Math.floor(n.lng/cell);let a=idx.get(k);if(!a){a=[];idx.set(k,a);}a.push(i);}return {idx,cell};}
+function nearestWith(index,nodeArr,lat,lng,pred,maxR){const c=index.cell;const ci=Math.floor(lat/c),cj=Math.floor(lng/c);let bi=-1,bd=maxR||Infinity;const span=maxR?Math.max(2,Math.ceil(maxR/(c*111000))+1):3;
+ for(let di=-span;di<=span;di++)for(let dj=-span;dj<=span;dj++){const arr=index.idx.get((ci+di)+"_"+(cj+dj));if(!arr)continue;for(const i of arr){if(pred&&!pred(i))continue;const n=nodeArr[i];const d=hav(lat,lng,n.lat,n.lng);if(d<bd){bd=d;bi=i;}}}
+ return bi<0?null:{idx:bi,dist:bd};}
+function classifyWay(t){let hw=t.highway;
+ // indoor corridors may carry no highway tag — treat indoor=corridor/yes as walkable
+ if(!hw){if(t.indoor==="corridor"||t.indoor==="yes")hw="corridor";else return null;}
+ if(/^(motorway|trunk|construction|raceway|proposed|bus_guideway|escape)/.test(hw))return null;
+ if(t.foot==="no"||(t.access==="private"&&!t.foot))return null;
+ const lvl=t.level?Math.max(...String(t.level).split(/[;,]/).map(parseFloat).filter(x=>!isNaN(x))):NaN;
+ const lay=t.layer?parseFloat(t.layer):NaN;const ind=t.indoor;
+ const isBridge=!!t.bridge&&t.bridge!=="no";
+ // tier 1 — skyway proper: fully enclosed / climate-controlled (indoor level, corridor, building passage, explicit skyway)
+ const enclosed=(lvl>=1)||hw==="corridor"||t.tunnel==="building_passage"||t.skyway==="yes"||ind==="yes"||ind==="corridor"||t.enclosed==="yes";
+ // tier 2 — covered walkway: roofed but open (awning/arcade/colonnade), or elevated-but-not-enclosed; bridges excluded
+ const covered=(!!t.covered&&t.covered!=="no")||(lay>=1&&!isBridge);
+ const cls=enclosed?"sky":covered?"covered":"street";
+ return {cls,name:t.name||t.ref||null};}
+function buildOSMGraph(elements){
+ const nodeLL=new Map();for(const el of elements)if(el.type==="node")nodeLL.set(el.id,[el.lat,el.lon]);
+ const im=new Map();const nodeArr=[];
+ function gi(id){let x=im.get(id);if(x===undefined){const ll=nodeLL.get(id);x=nodeArr.length;nodeArr.push({id,lat:ll[0],lng:ll[1],hasStreet:false,hasSky:false});im.set(id,x);}return x;}
+ const edges=[];
+ for(const el of elements){if(el.type!=="way"||!el.tags||!el.nodes)continue;const cl=classifyWay(el.tags);if(!cl)continue;const nd=el.nodes;
+  const isSky=cl.cls==="sky";
+  for(let k=0;k<nd.length-1;k++){const A=nd[k],B=nd[k+1];if(!nodeLL.has(A)||!nodeLL.has(B))continue;const ia=gi(A),ib=gi(B);if(ia===ib)continue;const a=nodeArr[ia],b=nodeArr[ib];const len=hav(a.lat,a.lng,b.lat,b.lng);if(len<=0)continue;
+   const profs=isSky?[profOfPoint((a.lat+b.lat)/2,(a.lng+b.lng)/2)]:[];
+   edges.push({u:ia,v:ib,len,type:cl.cls,profs,name:cl.name});
+   if(isSky){a.hasSky=b.hasSky=true;}else{a.hasStreet=b.hasStreet=true;}}}   // covered + street are at grade
+ const index=buildIndex(nodeArr,0.0006);let trans=0;
+ for(let i=0;i<nodeArr.length;i++){const n=nodeArr[i];if(n.hasSky&&!n.hasStreet){const near=nearestWith(index,nodeArr,n.lat,n.lng,(j)=>nodeArr[j].hasStreet,TRANS_R);if(near){edges.push({u:i,v:near.idx,len:Math.max(2,near.dist),type:"trans",profs:[],name:null});trans++;}}}
+ const adj=nodeArr.map(()=>[]);edges.forEach((e,i)=>{adj[e.u].push(i);adj[e.v].push(i);});
+ const sky=edges.filter(e=>e.type==="sky").length;const cov=edges.filter(e=>e.type==="covered").length;
+ return {nodeArr,edges,adj,index,kind:"osm",circ:1.0,stats:{nodes:nodeArr.length,sky,cov,trans}};
+}
+function buildGridGraph(){
+ const NA=AVENUES.length,NS=STREETS.length;const id=(i,j)=>i*NS+j;
+ const latOf=(i,j)=>-5.483593e-4*i-1.067648e-3*j+44.98575;
+ const lonOf=(i,j)=>1.713057e-3*i-5.758677e-4*j-93.27578;
+ const inSky=(i,j)=>(i>=2&&i<=9&&j>=1&&j<=9)||(i>=10&&i<=12&&j>=3&&j<=8)||(i>=4&&i<=6&&j>=9&&j<=11)||(i>=0&&i<=2&&j>=2&&j<=4);
+ const profOf=(i,j)=>{if(i>=10&&j>=6)return "ext";if(i>=11&&j<=5)return "lim";if((i===5&&j>=8)||(i===4&&j===8))return "ext";if(i>=7&&i<=8&&j>=4&&j<=5)return "off";if(i>=4&&i<=6&&j>=10)return "lim";return "std";};
+ const nodeArr=[];for(let i=0;i<NA;i++)for(let j=0;j<NS;j++)nodeArr.push({id:id(i,j),lat:latOf(i,j),lng:lonOf(i,j),i,j});
+ const edges=[];
+ function add(ia,ib,name){const a=nodeArr[ia],b=nodeArr[ib];const len=hav(a.lat,a.lng,b.lat,b.lng);const sky=inSky(a.i,a.j)&&inSky(b.i,b.j);
+   edges.push({u:ia,v:ib,len,type:"street",profs:[],name});if(sky)edges.push({u:ia,v:ib,len,type:"sky",profs:[profOf(a.i,a.j),profOf(b.i,b.j)],name});}
+ for(let i=0;i<NA;i++)for(let j=0;j<NS;j++){if(i+1<NA)add(id(i,j),id(i+1,j),STREETS[j]);if(j+1<NS)add(id(i,j),id(i,j+1),AVENUES[i]);}
+ const index=buildIndex(nodeArr,0.0006);const adj=nodeArr.map(()=>[]);edges.forEach((e,i)=>{adj[e.u].push(i);adj[e.v].push(i);});
+ return {nodeArr,edges,adj,index,kind:"grid",circ:1.24,stats:{nodes:nodeArr.length,sky:edges.filter(e=>e.type==="sky").length,trans:0}};
+}
+
+/* ===================== BUILDING THROUGH-CONNECTIONS ===================== */
+function pointInPoly(lat,lng,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const yi=poly[i][0],xi=poly[i][1],yj=poly[j][0],xj=poly[j][1];const hit=((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/((yj-yi)||1e-12)+xi);if(hit)inside=!inside;}return inside;}
+function parseBuildings(elements){const nodeLL=new Map();for(const el of elements)if(el.type==="node")nodeLL.set(el.id,[el.lat,el.lon]);
+ const polys=[];for(const el of elements){if(el.type!=="way"||!el.tags||!el.tags.building||!el.nodes||el.nodes.length<4)continue;
+   const poly=[];for(const id of el.nodes){const ll=nodeLL.get(id);if(ll)poly.push([ll[0],ll[1]]);}if(poly.length<4)continue;
+   let cx=0,cy=0;for(const p of poly){cy+=p[0];cx+=p[1];}cy/=poly.length;cx/=poly.length;
+   let a=1e9,b=-1e9,c=1e9,d=-1e9;for(const p of poly){a=Math.min(a,p[0]);b=Math.max(b,p[0]);c=Math.min(c,p[1]);d=Math.max(d,p[1]);}
+   polys.push({poly,cx,cy,bb:[a,b,c,d],name:el.tags.name||null});}return polys;}
+function findBuilding(blds,lat,lng){for(let k=0;k<blds.length;k++){const B=blds[k];if(lat<B.bb[0]||lat>B.bb[1]||lng<B.bb[2]||lng>B.bb[3])continue;if(pointInPoly(lat,lng,B.poly))return k;}return -1;}
+function addBuildingConnections(G,elements,streetR){const blds=parseBuildings(elements);
+ const byB=new Map();for(let i=0;i<G.nodeArr.length;i++){const n=G.nodeArr[i];if(!n.hasSky)continue;const b=findBuilding(blds,n.lat,n.lng);if(b>=0){if(!byB.has(b))byB.set(b,[]);byB.get(b).push(i);}}
+ let thru=0,ent=0;
+ for(const [b,arr] of byB){const B=blds[b];const prof=profOfPoint(B.cy,B.cx);
+   let hub=arr[0],hd=Infinity;for(const i of arr){const d=hav(G.nodeArr[i].lat,G.nodeArr[i].lng,B.cy,B.cx);if(d<hd){hd=d;hub=i;}}
+   if(arr.length>=2){for(const i of arr){if(i===hub)continue;const a=G.nodeArr[i],h=G.nodeArr[hub];G.edges.push({u:i,v:hub,len:Math.max(3,hav(a.lat,a.lng,h.lat,h.lng)),type:"sky",profs:[prof],name:B.name||"building passage"});thru++;}}
+   const near=nearestWith(G.index,G.nodeArr,B.cy,B.cx,(j)=>G.nodeArr[j].hasStreet,streetR||90);
+   if(near){G.edges.push({u:near.idx,v:hub,len:Math.max(3,near.dist),type:"trans",profs:[],name:null});ent++;}}
+ G.adj=G.nodeArr.map(()=>[]);G.edges.forEach((e,i)=>{G.adj[e.u].push(i);G.adj[e.v].push(i);});
+ G.stats.thru=thru;G.stats.bldEnt=ent;G.stats.buildings=blds.length;return {thru,ent,buildings:blds.length};}
+
+/* ===================== ROUTING ===================== */
+class Heap{constructor(){this.a=[];}get size(){return this.a.length;}
+ push(p,v){const a=this.a;a.push([p,v]);let i=a.length-1;while(i>0){const par=(i-1)>>1;if(a[par][0]<=a[i][0])break;[a[par],a[i]]=[a[i],a[par]];i=par;}}
+ pop(){const a=this.a;const top=a[0];const last=a.pop();if(a.length){a[0]=last;let i=0,n=a.length;while(true){let l=2*i+1,r=2*i+2,s=i;if(l<n&&a[l][0]<a[s][0])s=l;if(r<n&&a[r][0]<a[s][0])s=r;if(s===i)break;[a[s],a[i]]=[a[i],a[s]];i=s;}}return top;}}
+function edgeCost(e,wU,wC){const t=e.len/SPEED;
+ if(e.type==="sky")return skyOpen(e,MODEL,DOW,MINS)?e.len*SKY_CIRC/SPEED:Infinity;
+ if(e.type==="trans")return LEVEL+t;
+ if(e.type==="covered")return (wC+1)*t;   // roofed, always open — covered tier
+ return (wU+1)*t;}                          // uncovered (exposed) — worst tier
+function dijkstra(G,s,t,wU,wC){const N=G.nodeArr.length;const dist=new Float64Array(N).fill(Infinity);const prev=new Int32Array(N).fill(-1);const pe=new Int32Array(N).fill(-1);const h=new Heap();dist[s]=0;h.push(0,s);
+ while(h.size){const top=h.pop();const d=top[0],u=top[1];if(d>dist[u])continue;if(u===t)break;
+  for(const ei of G.adj[u]){const e=G.edges[ei];const c=edgeCost(e,wU,wC);if(!isFinite(c))continue;const v=e.u===u?e.v:e.u;if(d+c<dist[v]){dist[v]=d+c;prev[v]=u;pe[v]=ei;h.push(d+c,v);}}}
+ if(!isFinite(dist[t]))return null;
+ const eseq=[],nseq=[t];let cur=t;while(cur!==s&&cur>=0){const ei=pe[cur];eseq.push(ei);cur=prev[cur];nseq.push(cur);}eseq.reverse();nseq.reverse();
+ let realT=0,uncovT=0,covT=0,skyT=0;for(const ei of eseq){const e=G.edges[ei];if(e.type==="sky"){const t2=e.len*SKY_CIRC/SPEED;skyT+=t2;realT+=t2;}else if(e.type==="trans"){realT+=LEVEL+e.len/SPEED;}else if(e.type==="covered"){const t2=e.len/SPEED;covT+=t2;realT+=t2;}else{const t2=e.len/SPEED;uncovT+=t2;realT+=t2;}}
+ return {ok:true,eseq,nseq,realT,uncovT,covT,outT:uncovT,skyT,cost:dist[t]};
+}
+function snap(G,lat,lng){return nearestWith(G.index,G.nodeArr,lat,lng,null,400);}
+function fullRoute(G,aLat,aLng,bLat,bLng,wU,wC){
+ const aN=snap(G,aLat,aLng),bN=snap(G,bLat,bLng);
+ const dr=hav(aLat,aLng,bLat,bLng)/SPEED;
+ const fb={mode:"direct",realTime:dr,outTime:dr,covTime:0,skyTime:0,cost:(wU+1)*dr,accA:0,accB:0,gr:null,aN,bN};
+ if(!aN||!bN||aN.idx===bN.idx)return fb;                 // trivial: same/no node
+ const gr=dijkstra(G,aN.idx,bN.idx,wU,wC);
+ if(!gr)return fb;                                        // disconnected: last-resort straight line
+ const accA=aN.dist/SPEED,accB=bN.dist/SPEED;             // access legs are exposed (uncovered)
+ return {mode:"graph",realTime:accA+gr.realT+accB,outTime:accA+gr.uncovT+accB,covTime:gr.covT,skyTime:gr.skyT,cost:(wU+1)*(accA+accB)+gr.cost,accA,accB,gr,aN,bN};}
+
+/* ===================== MAP ===================== */
+let ptA=null,ptB=null,pickTarget="a",lastRes=null,G=null;
+let osmCache=null,THRU=false;
+const map=L.map('map',{zoomControl:true,attributionControl:true}).setView([44.9753,-93.2685],15);
+const tiles={
+ "Dark":L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:20,attribution:'&copy; OpenStreetMap &copy; CARTO'}),
+ "Light":L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{subdomains:"abcd",maxZoom:20,attribution:'&copy; OpenStreetMap &copy; CARTO'}),
+ "Standard":L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{subdomains:"abc",maxZoom:19,attribution:'&copy; OpenStreetMap contributors'})
+};
+tiles["Dark"].addTo(map);L.control.layers(tiles,null,{position:"topright"}).addTo(map);
+const skyLayer=L.layerGroup().addTo(map);const routeLayer=L.layerGroup().addTo(map);let markA=null,markB=null;
+
+// status banner
+const netstat=document.createElement("div");netstat.style.cssText="font-size:10px;color:var(--ink-faint);padding:4px 6px;border:1px solid #1c2a3c;border-radius:7px;background:#0a111c;line-height:1.4";
+netstat.innerHTML="◌ modeled grid · loading live OpenStreetMap…";
+document.querySelector(".controls").insertBefore(netstat,document.querySelector(".controls").firstChild);
+
+function renderSky(){skyLayer.clearLayers();if(!G)return;
+ for(const e of G.edges){const a=G.nodeArr[e.u],b=G.nodeArr[e.v];
+   if(e.type==="sky"){const open=skyOpen(e,MODEL,DOW,MINS);
+     L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:open?"#7fe0ff":"#e9566d",weight:open?3:2,opacity:open?.8:.45,dashArray:open?null:"4,5",interactive:false}).addTo(skyLayer);}
+   else if(e.type==="covered"){
+     L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:"#5fd39a",weight:2.5,opacity:.55,dashArray:"1,5",interactive:false}).addTo(skyLayer);}}}
+function abIcon(ch,col){return L.divIcon({className:"",html:'<div class="ab-icon" style="background:'+col+'">'+ch+'</div>',iconSize:[22,22],iconAnchor:[11,11]});}
+function setMarker(which,latlng){
+ if(which==="a"){if(markA)markA.setLatLng(latlng);else markA=L.marker(latlng,{icon:abIcon("A","#5fd39a"),draggable:true,zIndexOffset:1000}).addTo(map).on("dragend",e=>{const ll=e.target.getLatLng();ptA=L.latLng(ll.lat,ll.lng);syncAB();recompute();});}
+ else{if(markB)markB.setLatLng(latlng);else markB=L.marker(latlng,{icon:abIcon("B","#e9566d"),draggable:true,zIndexOffset:1000}).addTo(map).on("dragend",e=>{const ll=e.target.getLatLng();ptB=L.latLng(ll.lat,ll.lng);syncAB();recompute();});}}
+function drawRoute(){routeLayer.clearLayers();if(!lastRes||!G)return;const r=lastRes;
+ if(r.mode==="direct"){L.polyline([[ptA.lat,ptA.lng],[ptB.lat,ptB.lng]],{color:"#f6a13d",weight:5,opacity:.95,dashArray:"7,6"}).addTo(routeLayer);return;}
+ const aN=G.nodeArr[r.aN.idx],bN=G.nodeArr[r.bN.idx];
+ if(r.aN.dist>20)L.polyline([[ptA.lat,ptA.lng],[aN.lat,aN.lng]],{color:"#f6a13d",weight:4,opacity:.8,dashArray:"2,7"}).addTo(routeLayer);
+ for(const ei of r.gr.eseq){const e=G.edges[ei];const a=G.nodeArr[e.u],b=G.nodeArr[e.v];
+   if(e.type==="sky")L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:"#7fe0ff",weight:6,opacity:.97}).addTo(routeLayer);
+   else if(e.type==="covered")L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:"#5fd39a",weight:5.5,opacity:.96}).addTo(routeLayer);
+   else if(e.type==="street")L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color:"#f6a13d",weight:5,opacity:.95,dashArray:"7,6"}).addTo(routeLayer);}
+ if(r.bN.dist>20)L.polyline([[bN.lat,bN.lng],[ptB.lat,ptB.lng]],{color:"#f6a13d",weight:4,opacity:.8,dashArray:"2,7"}).addTo(routeLayer);
+}
+function buildDirections(r){
+ const steps=[{ic:"◉",cls:"term sky",html:"<b>Start</b>"}];
+ if(r.mode==="direct"){steps.push({ic:"⇢",cls:"out",html:"<b>Walk outside</b> straight to destination · ~"+Math.round(r.realTime*SPEED)+"m"});steps.push({ic:"◉",cls:"term",html:"<b>Arrive</b>"});return steps;}
+ if(r.aN.dist>20)steps.push({ic:"⇡",cls:"out",html:"Walk <b>~"+Math.round(r.aN.dist)+"m</b> to the network"});
+ const E=r.gr.eseq,Nq=r.gr.nseq;let k=0,prevType=null;
+ while(k<E.length){const e=G.edges[E[k]];const tp=e.type;
+   if(tp==="trans"){const nextSky=(k+1<E.length&&G.edges[E[k+1]].type==="sky");steps.push({ic:nextSky?"⤒":"⤓",cls:nextSky?"sky":"out",html:nextSky?"<b>Up</b> to skyway level":"<b>Down</b> to street level"});k++;prevType=tp;continue;}
+   let endK=k;const nm=e.name;while(endK+1<E.length){const ne=G.edges[E[endK+1]];if(ne.type!==tp||ne.name!==nm)break;endK++;}
+   const fromN=G.nodeArr[Nq[k]],toN=G.nodeArr[Nq[endK+1]];const dir=cardinal(fromN.lat,fromN.lng,toN.lat,toN.lng);
+   const label=nm||(tp==="sky"?"skyway corridor":tp==="covered"?"covered walkway":"walkway");
+   if(tp==="sky")steps.push({ic:"⇢",cls:"sky",html:"<b>Skyway</b> "+dir+(nm?" · "+nm:"")});
+   else if(tp==="covered")steps.push({ic:"⇢",cls:"cov",html:"<b>Covered</b> "+dir+(nm?" · "+nm:"")});
+   else steps.push({ic:"⇢",cls:"out",html:"<b>Outside</b> "+dir+" · "+label});
+   k=endK+1;prevType=tp;}
+ if(r.bN.dist>20)steps.push({ic:"⇣",cls:"out",html:"Walk <b>~"+Math.round(r.bN.dist)+"m</b> to destination"});
+ steps.push({ic:"◉",cls:"term",html:"<b>Arrive</b>"});return steps;
+}
+
+/* ===================== UI ===================== */
+function fmt12(mins){let hh=Math.floor(mins/60)%24,mm=mins%60;const ap=hh<12?"AM":"PM";let h12=hh%12||12;return h12+":"+String(mm).padStart(2,"0")+" "+ap;}
+const DAYN=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+function updClock(){g("cc-t").textContent=fmt12(MINS);g("cc-d").textContent=DAYN[DOW];const open=nodeOpen("std",MODEL,DOW,MINS);const el=g("cc-st");el.textContent=open?"skyways open":"skyways closed";el.className="st "+(open?"open":"closed");}
+function syncAB(){g("nm-a").textContent=ptA?(ptA.label||(ptA.lat.toFixed(4)+", "+ptA.lng.toFixed(4))):"tap map…";g("nm-b").textContent=ptB?(ptB.label||(ptB.lat.toFixed(4)+", "+ptB.lng.toFixed(4))):"tap map…";g("pill-a").dataset.active=(pickTarget==="a");g("pill-b").dataset.active=(pickTarget==="b");}
+function recompute(){updClock();if(!ptA||!ptB||!G){g("summary").style.display="none";g("dirs").innerHTML="";g("hint").style.display="";lastRes=null;drawRoute();return;}
+ g("hint").style.display="none";
+ const M=MODES[WXK];const r=fullRoute(G,ptA.lat,ptA.lng,ptB.lat,ptB.lng,M.wU,M.wC);lastRes=r;drawRoute();
+ const mins=r.realTime/60;const pctIn=r.realTime>0?Math.round(100*r.skyTime/r.realTime):0;const outMin=r.outTime/60;const covMin=(r.covTime||0)/60;
+ g("summary").style.display="";g("sum-time").textContent=mins.toFixed(0)+" min";
+ g("sum-2").innerHTML="<b>"+outMin.toFixed(1)+" min exposed</b> · "+covMin.toFixed(1)+" covered · "+pctIn+"% skyway"+(r.mode==="direct"?"<br>no skyway nearby — walking":(pctIn<60&&WXK!=="clear"?"<br><span class='wn'>limited skyway open now / no sheltered path</span>":""));
+ g("dirs").innerHTML=buildDirections(r).map(s=>"<div class='step "+(s.cls||"")+"'><div class='ic'>"+s.ic+"</div><div class='tx'>"+s.html+"</div></div>").join("");
+}
+function setPoint(which,latlng,label){setMarker(which,latlng);const ll=L.latLng(latlng.lat!==undefined?latlng.lat:latlng[0],latlng.lng!==undefined?latlng.lng:latlng[1]);ll.label=label||null;if(which==="a")ptA=ll;else ptB=ll;pickTarget=which==="a"?"b":"a";syncAB();recompute();}
+map.on("click",e=>setPoint(pickTarget,e.latlng,null));
+g("pill-a").addEventListener("click",()=>{pickTarget="a";syncAB();});
+g("pill-b").addEventListener("click",()=>{pickTarget="b";syncAB();});
+g("swap").addEventListener("click",()=>{const t=ptA;ptA=ptB;ptB=t;if(ptA)setMarker("a",ptA);if(ptB)setMarker("b",ptB);syncAB();recompute();});
+g("clear").addEventListener("click",()=>{ptA=ptB=null;if(markA){map.removeLayer(markA);markA=null;}if(markB){map.removeLayer(markB);markB=null;}pickTarget="a";lastRes=null;g("results").classList.remove("on");syncAB();recompute();});
+g("day").addEventListener("change",e=>{DOW=+e.target.value;renderSky();recompute();});
+g("time").addEventListener("input",e=>{const[h,m]=e.target.value.split(":").map(Number);MINS=h*60+m;renderSky();recompute();});
+g("now").addEventListener("click",()=>{const d=new Date();DOW=(d.getDay()+6)%7;MINS=d.getHours()*60+d.getMinutes();g("day").value=DOW;g("time").value=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");renderSky();recompute();});
+g("hours-model").addEventListener("click",()=>{MODEL=MODEL==="typ"?"ord":"typ";g("hours-model").textContent="Hours: "+(MODEL==="typ"?"typical":"ordinance");renderSky();recompute();});
+document.querySelectorAll("#wx button").forEach(b=>b.addEventListener("click",()=>{WXK=b.dataset.w;document.querySelectorAll("#wx button").forEach(x=>x.setAttribute("aria-selected",x===b?"true":"false"));recompute();}));
+g("collapse").addEventListener("click",()=>{document.body.classList.toggle("collapsed");g("collapse").textContent=document.body.classList.contains("collapsed")?"+":"–";setTimeout(()=>map.invalidateSize(),60);});
+
+/* ---- search (Nominatim) ---- */
+async function geocode(q){const vb="-93.310,44.998,-93.230,44.955";const base="https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6";
+ try{let res=await fetch(base+"&bounded=1&viewbox="+vb+"&q="+encodeURIComponent(q));let data=await res.json();if(!data||!data.length){res=await fetch(base+"&q="+encodeURIComponent(q+" Minneapolis"));data=await res.json();}return data||[];}catch(err){return {error:String(err)};}}
+function renderResults(list){const box=g("results");box.innerHTML="";
+ if(list.error){box.innerHTML="<div style='font-size:11px;color:var(--warn);padding:4px'>Search unavailable (offline/blocked). Tap the map, or use Google ↗.</div>";box.classList.add("on");return;}
+ if(!list.length){box.innerHTML="<div style='font-size:11px;color:var(--ink-faint);padding:4px'>No matches downtown. Try Google ↗ or tap the map.</div>";box.classList.add("on");return;}
+ for(const r of list){const div=document.createElement("div");div.className="res";const nm=r.display_name.split(",").slice(0,2).join(", ");
+   div.innerHTML="<div class='nm'><b>"+nm+"</b></div><div class='set'><button class='a'>A</button><button class='b'>B</button></div>";const ll=L.latLng(+r.lat,+r.lon);
+   div.querySelector(".a").addEventListener("click",()=>{setPoint("a",ll,nm);map.panTo(ll);box.classList.remove("on");});
+   div.querySelector(".b").addEventListener("click",()=>{setPoint("b",ll,nm);map.panTo(ll);box.classList.remove("on");});box.appendChild(div);}
+ box.classList.add("on");}
+async function doSearch(){const q=g("q").value.trim();if(!q)return;g("results").innerHTML="<div style='font-size:11px;color:var(--ink-faint);padding:4px'>Searching…</div>";g("results").classList.add("on");renderResults(await geocode(q));}
+g("go").addEventListener("click",doSearch);g("q").addEventListener("keydown",e=>{if(e.key==="Enter")doSearch();});
+g("gmaps").addEventListener("click",()=>{const q=g("q").value.trim()||"Minneapolis Skyway";window.open("https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(q),"_blank");});
+
+/* ===================== INIT + OSM FETCH ===================== */
+function activate(graph,kind){G=graph;SKY_CIRC=graph.circ;renderSky();recompute();}
+activate(buildGridGraph(),"grid"); // instant
+renderSky();updClock();
+setPoint("a",L.latLng(44.9817,-93.2785),"Target Field");
+setPoint("b",L.latLng(44.9725,-93.2614),"HCMC · Elliot Park");
+map.fitBounds(L.latLngBounds([[44.9817,-93.2785],[44.9725,-93.2614]]).pad(0.4));
+
+function activateOSM(){if(!osmCache)return;const og=buildOSMGraph(osmCache);let bc={thru:0,ent:0,buildings:0};if(THRU)bc=addBuildingConnections(og,osmCache,90);
+ G=og;SKY_CIRC=og.circ;renderSky();recompute();
+ netstat.innerHTML="\u25cf live OpenStreetMap \u00b7 <b style='color:var(--ok)'>"+og.stats.nodes.toLocaleString()+"</b> nodes \u00b7 "+og.stats.sky+" skyway"+(THRU?" \u00b7 <b>"+bc.thru+"</b> thru-bldg ("+bc.buildings+" bldgs)":" \u00b7 thru-bldg OFF");}
+const thruBtn=document.createElement("button");thruBtn.className="btn";thruBtn.style.cssText="width:100%;margin-top:1px;font-size:11px";thruBtn.textContent="Through-buildings: OFF";
+netstat.after(thruBtn);
+thruBtn.addEventListener("click",()=>{THRU=!THRU;thruBtn.textContent="Through-buildings: "+(THRU?"ON":"OFF");if(G&&G.kind==="osm")activateOSM();});
+
+async function fetchOSM(){
+ const bbox="44.9665,-93.2840,44.9882,-93.2505"; // S,W,N,E
+ const ql=`[out:json][timeout:60];(way["highway"~"^(footway|path|pedestrian|steps|elevator|corridor|living_street|residential|service|unclassified|tertiary|secondary|primary|cycleway|track)$"](${bbox});way["indoor"~"^(yes|corridor)$"](${bbox});way["building"](${bbox}););(._;>;);out body;`;
+ const endpoints=["https://overpass-api.de/api/interpreter","https://overpass.kumi.systems/api/interpreter","https://overpass.private.coffee/api/interpreter"];
+ for(const ep of endpoints){
+   try{const ctrl=new AbortController();const to=setTimeout(()=>ctrl.abort(),45000);
+     const res=await fetch(ep,{method:"POST",body:"data="+encodeURIComponent(ql),headers:{"Content-Type":"application/x-www-form-urlencoded"},signal:ctrl.signal});
+     clearTimeout(to);if(!res.ok)throw new Error("HTTP "+res.status);const j=await res.json();
+     if(!j.elements||!j.elements.length)throw new Error("empty");
+     if(j.elements.filter(e=>e.type==="way").length<10)throw new Error("too small");
+     osmCache=j.elements; activateOSM(); return;
+   }catch(err){/* try next endpoint */}
+ }
+ netstat.innerHTML="◌ live OpenStreetMap unavailable — using <b>modeled grid</b>. Open this file in a browser (needs internet) for real streets.";
+}
+fetchOSM();
+
+</script>
+</body>
+</html>
